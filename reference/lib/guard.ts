@@ -2,7 +2,13 @@ import { timingSafeEqual } from 'node:crypto';
 
 // The three helpers the Readmarks routes use (the site's own file has more).
 export function clientIp(req: Request): string {
-  return (req.headers.get('x-real-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0] ?? '').trim() || 'unknown';
+  const ip = (req.headers.get('x-vercel-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0] ?? '').trim() || 'unknown';
+  // An IPv6 user usually controls a whole /64: rate limits treat it as one address.
+  if (!ip.includes(':')) return ip;
+  const [head, tail] = ip.toLowerCase().split('::');
+  const h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
+  const g = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+  return `${g.slice(0, 4).join(':')}::/64`;
 }
 
 const buckets = new Map<string, number[]>();

@@ -57,15 +57,30 @@ export function inCidr(ip: string, cidr: string): boolean {
   return (a.n >> shift) === (b.n >> shift);
 }
 
-/** Every CIDR-looking string anywhere in an operator's list (formats differ: ipv4Prefix, ipv6Prefix, cidr, plain text). */
+/**
+ * The prefixes an operator's list declares, read by its structure only: JSON lists ({"prefixes":[{"ipv4Prefix"|"ipv6Prefix"}]})
+ * and SAIL files (ipv4_prefixes / ipv6_prefixes arrays). Never scraped by pattern: an HTML page can contain the
+ * requester's own address. Anything else yields nothing.
+ */
 export function extractPrefixes(body: string): string[] {
   const out = new Set<string>();
-  for (const m of body.matchAll(/(?<![\w.:])((?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?|[0-9a-fA-F:]*:[0-9a-fA-F:]+(?:\/\d{1,3})?)(?![\w.:])/g)) {
-    const [base, len] = m[1].split('/');
-    if (!net.isIP(base)) continue;
-    out.add(len === undefined ? `${base}/${net.isIPv4(base) ? 32 : 128}` : m[1]);
+  const add = (v: unknown) => {
+    if (typeof v !== 'string') return;
+    const [base, len] = v.trim().split('/');
+    if (!net.isIP(base)) return;
+    const c = len === undefined ? `${base}/${net.isIPv4(base) ? 32 : 128}` : `${base}/${len}`;
+    if (!privateAddress(base) && Number(c.split('/')[1]) >= (net.isIPv4(base) ? 8 : 16)) out.add(c);
+  };
+  const t = body.trim();
+  if (t.startsWith('{')) {
+    try {
+      const j = JSON.parse(t) as { prefixes?: { ipv4Prefix?: unknown; ipv6Prefix?: unknown }[] };
+      for (const x of Array.isArray(j.prefixes) ? j.prefixes : []) { add(x?.ipv4Prefix); add(x?.ipv6Prefix); }
+    } catch { /* not a list */ }
+    return [...out];
   }
-  return [...out].filter((c) => { const [b, l] = c.split('/'); return !privateAddress(b) && Number(l) >= (net.isIPv4(b) ? 8 : 16); });
+  for (const m of t.matchAll(/^\s*ipv[46]_prefixes\s*=\s*\[([\s\S]*?)\]/gm)) for (const q of m[1].matchAll(/"([^"]+)"/g)) add(q[1]);
+  return [...out];
 }
 
 async function col() {
@@ -79,7 +94,7 @@ async function refreshList(url: string): Promise<ListDoc | null> {
     if (u.protocol !== 'https:') return null;
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 5000);
-    const res = await fetch(u, { signal: ctl.signal, redirect: 'follow', headers: { 'user-agent': 'Readmarks-origin-registry/1.0 (+https://www.sgai.sg/protocols/readmarks/1.0)', accept: 'application/json, text/plain, */*' } });
+    const res = await fetch(u, { signal: ctl.signal, redirect: 'error', headers: { 'user-agent': 'Readmarks-origin-registry/1.0 (+https://www.sgai.sg/protocols/readmarks/1.0)', accept: 'application/json, text/plain, */*' } });
     clearTimeout(t);
     if (!res.ok) return null;
     const body = Buffer.from(await res.arrayBuffer());
@@ -195,7 +210,10 @@ export async function observe(req: Request, body: Buffer = Buffer.alloc(0)): Pro
         }
       }
     }
-    const pick = hits.find((h) => uaHas(h.o)) ?? hits.find((h) => !h.o.uaRequired && h.o.eligible) ?? hits.find((h) => !h.o.uaRequired) ?? null;
+    // Where an operator publishes overlapping lists, the most restrictive reading wins: if the address is in any
+    // programmable range, the request is attributed there, whatever its User-Agent says.
+    const prog = hits.find((h) => (h.o as Origin & { programmable?: boolean }).programmable);
+    const pick = prog ?? hits.find((h) => uaHas(h.o)) ?? hits.find((h) => !h.o.uaRequired && h.o.eligible) ?? hits.find((h) => !h.o.uaRequired) ?? null;
     if (pick) {
       evidence.push(pick.ev);
       if (!entry) { entry = pick.o; platform = pick.o.id; }

@@ -214,16 +214,18 @@ op = {o['id']: o for o in reg['origins']}
 top = {t['platform']: t['operator'] for t in reg['transcripts']}
 operator = lambda p: (op.get(p) or {}).get('operator') or top.get(p)
 now_ms = NOW or int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+st = get('/readmarks/1/stats' + (f'?now={NOW}' if NOW else ''))
+upto = st.get('logSize', len(parsed))   # the figures are cached for up to a minute: check them against the log as it was then
 tr = {}
 first_mark = {}
-for i, e in enumerate(parsed):
+for i, e in enumerate(parsed[:upto]):
     if e['type'] == 'corroboration':
         for ev in e['evidence']:
             if ev['type'] == 'transcript' and ev.get('standardPromptShown') is True: tr.setdefault(e['mark'], []).append(ev['platform'])
     if e['type'] == 'mark' and e['binding'] == 'session': first_mark.setdefault(e['session'], (i, e))
-from_assigned = lambda p, assigned: bool(p) and not (op.get(p) or {}).get('programmable') and operator(p) is not None and operator(p) == operator(assigned)
+from_assigned = lambda p, assigned: bool(p) and not (op.get(p) or {}).get('programmable') and operator(p) is not None and operator(p) == operator(assigned) and (p not in op or (op[p].get('eligible') and op[p].get('kind') != 'crawler'))
 rows = {}
-for i, e in enumerate(parsed):
+for i, e in enumerate(parsed[:upto]):
     if e['type'] != 'panel': continue
     group = None if e.get('registeredBy') == 'publisher' else e['panel']     # the publisher's panels pooled; every other panel alone
     t0 = datetime.datetime.fromisoformat(e['time'].replace('Z', '+00:00')).timestamp() * 1000
@@ -242,7 +244,6 @@ for i, e in enumerate(parsed):
                  and from_assigned(sev.get('openedFrom'), s['platform']) and sev.get('foreignOpensBeforeMark', 0) == 0)
         has_t = any(operator(p) == operator(s['platform']) for p in tr.get(leaves[mi].hex(), []))
         if valid and has_t and me['stance'] == 'endorse': r['k'] += 1
-st = get('/readmarks/1/stats' + (f'?now={NOW}' if NOW else ''))
 mism = []
 for d in st['documents']:
     for r in d['reviews']:

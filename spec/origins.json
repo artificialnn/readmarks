@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-23b",
+  "version": "2026-11-23c",
   "note": "Readmarks origin registry. Each row cites the operator's own page. 'eligible' is false for crawlers and indexers: they fetch without a principal asking, so they cannot leave marks. 'programmable' is true where a member of the public can originate requests from that range through an API, a cloud account or a tool they define: such marks are attributed, shown apart, and never enter a headline or a review outcome. A row is programmable unless the operator's page says the range serves only its own assistant acting for a user; where that is uncertain the row says so. Rows that share one address list are told apart by the User-Agent token (uaRequired). Request signatures are verified only for the signer origins listed here.",
   "origins": [
     {
@@ -246,11 +246,9 @@
       "ua": [
         "Amzn-User"
       ],
-      "ipLists": [
-        "https://developer.amazon.com/amazonbot/live-ip-addresses/"
-      ],
       "docs": "https://developer.amazon.com/amazonbot",
-      "programmable": false
+      "programmable": false,
+      "uncertain": "Amazon publishes its addresses as an HTML page, not a machine-readable list; no address evidence until it does."
     },
     {
       "id": "duckduckgo/duckassistbot",

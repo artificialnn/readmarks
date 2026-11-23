@@ -15,7 +15,8 @@ const F = async (path, o = {}) => {
 };
 const J = async (path, o) => { const r = await F(path, o); try { return { status: r.status, json: JSON.parse(r.text) }; } catch { return { status: r.status, json: null, text: r.text }; } };
 const first = async (url, v6) => { const j = await (await fetch(url)).json(); const p = j.prefixes.map((x) => x.ipv4Prefix).filter(Boolean)[0]; const [a, b, c, d] = p.split('/')[0].split('.').map(Number); return `${a}.${b}.${c}.${p.endsWith('/32') ? d : d + 1}`; };
-const OPENAI = { ip: await first('https://openai.com/chatgpt-user.json'), ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot' };
+const onlyIn = async (url, notUrl) => { const a = (await (await fetch(url)).json()).prefixes.map((x) => x.ipv4Prefix).filter(Boolean); const b = new Set((await (await fetch(notUrl)).json()).prefixes.map((x) => x.ipv4Prefix).filter(Boolean)); const p = a.find((x) => !b.has(x)); const [q, r, u, v] = p.split('/')[0].split('.').map(Number); return `${q}.${r}.${u}.${p.endsWith('/32') ? v : v + 1}`; };
+const OPENAI = { ip: await onlyIn('https://openai.com/chatgpt-user.json', 'https://openai.com/chatgpt-connectors.json'), ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot' };
 const ANTHROPIC_IP = await first('https://claude.com/crawling/bots.json');
 const CLAUDE = { ip: ANTHROPIC_IP, ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)' };
 const NOBODY = { ip: '203.0.113.77', ua: 'curl/8.7.1' };
@@ -128,7 +129,8 @@ t(run.entry.assurance === 'declared' && run.entry.platform === null && !run.entr
 console.log('\n== 6. Registered reviews: the attacks that target the headline ==');
 const disc = (await J('/.well-known/readmarks.json')).json;
 const PROMPT = disc.reviews.prompt.text;
-const post = (body, headers = {}) => J('/readmarks/1/panels', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+let pn = 0;
+const post = (body, headers = {}) => J('/readmarks/1/panels', { method: 'POST', headers: { 'content-type': 'application/json', 'x-readmarks-test-ip': `198.51.100.${++pn}`, ...headers }, body: JSON.stringify(body) });
 const tx = (s, c, prompt = PROMPT.replace('{url}', s.url)) => `<html><div class="user">${esc(prompt)}</div><div class="assistant">Receipt code <b>${c}</b>. Reasons: ...</div></html>`;
 const run1 = async (s, who, stance, markFrom) => {
   const pg = await F(s.path, who);
@@ -155,7 +157,7 @@ const before = await size(); const twice = await F(g1.links.object, OPENAI);
 t(twice.text.includes('already recorded') && !code(twice.text) && (await size()) === before && (await receipt(g1.code)).entry.stance === 'endorse', 'ATTACK change a session\'s stance afterwards -> refused, nothing added, the first mark stands');
 const k1 = await run1(cl[0], CLAUDE, 'endorse'); const v1 = 'https://claude.ai/share/44444444-4444-4444-8444-444444444444'; fixture(v1, tx(cl[0], k1.code)); await attach(k1.code, v1);
 await run1(cl[1], API, 'endorse');
-const rows = async (q = '') => (await J('/readmarks/1/stats' + q)).json.documents[0].reviews;
+const rows = async (q = `?now=${Date.now()}`) => (await J('/readmarks/1/stats' + q)).json.documents[0].reviews; // ?now= skips the one-minute cache (test hook)
 const find = (rs, platform, panel) => rs.find((r) => r.platform === platform && r.panel === panel);
 let rv = await rows(); const H = find(rv, 'openai/chatgpt', pan.json.panel);
 t(H.registered === 5 && H.resolved === 5 && H.endorsedWithTranscript === 1 && Math.abs(H.rate - 0.2) < 1e-9 && H.outcomes.none === 2 && H.outcomes.endorse === 2,
@@ -190,6 +192,28 @@ t(rg.entry.platform === 'google/cloud-user-fetchers' && grow.resolved === 1 && g
   const k2 = await J('/readmarks/1/tickets', { method: 'POST', body: JSON.stringify({ doc: 'readmarks-1.0' }), headers: { 'content-type': 'application/json' }, ...NOBODY });
   t(k1.json.seenAs.platform === 'openai/chatgpt-user' && k1.json.seenAs.assurance === 'observed' && k2.json.seenAs.platform === null, 'a ticket says how its request was seen (so a client can tell what its mark will be worth)'); }
 
+{ // second review: overlapping lists, crawlers on sessions, IPv6 rotation, null body
+  const conn = (await (await fetch('https://openai.com/chatgpt-connectors.json')).json()).prefixes.map((x) => x.ipv4Prefix).filter(Boolean);
+  const user = new Set((await (await fetch('https://openai.com/chatgpt-user.json')).json()).prefixes.map((x) => x.ipv4Prefix).filter(Boolean));
+  const both = conn.find((p) => user.has(p)); const [a1, b1, c1, d1] = both.split('/')[0].split('.').map(Number);
+  const OVER = { ip: `${a1}.${b1}.${c1}.${both.endsWith('/32') ? d1 : d1 + 1}`, ua: OPENAI.ua };
+  const ov = await linkMark(OVER, 'endorse'); const rov = await receipt(ov.code);
+  t(rov.entry.platform === 'openai/chatgpt-connectors', 'ATTACK address in both ChatGPT-User and the connectors list, with a ChatGPT-User User-Agent -> attributed to the programmable connectors row', rov.entry.platform);
+  const sail = await linkMark({ ip: '153.61.208.16', ua: 'Mozilla/5.0 Claude-Agent/1.0' }, 'endorse'); const rsl = await receipt(sail.code);
+  t(rsl.entry.platform === 'anthropic/api-tools', 'ATTACK address in both Claude-Agent and Anthropic\'s API range -> attributed to the API range', rsl.entry.platform);
+  const cpan = await post({ doc: 'readmarks-1.0', registrant: 'Crawler test', sessions: [{ platform: 'anthropic/claude', n: 1 }] });
+  const CS = withPaths(cpan.json)[0]; const CRAWL = { ip: ANTHROPIC_IP, ua: 'Mozilla/5.0 (compatible; ClaudeBot/1.0)' };
+  const copen = await F(CS.path, CRAWL); await F(CS.path, CLAUDE);
+  const cm = await run1(CS, CLAUDE, 'endorse', CRAWL);
+  t(copen.status === 403 && !cm.code, 'ATTACK a crawler opens or marks a review session -> refused');
+  let ok6 = 0; for (let i = 1; i <= 7; i++) { const r = await post({ doc: 'readmarks-1.0', registrant: 'v6', sessions: [{ platform: 'openai/chatgpt', n: 1 }] }, { 'x-readmarks-test-ip': `2001:db8:1:2::${i}` }); if (r.status === 201) ok6++; }
+  t(ok6 <= 5, `ATTACK rotate through 7 IPv6 addresses in one /64 to register panels -> ${ok6} accepted (the /64 is one address)`);
+  const big = await post({ doc: 'readmarks-1.0', registrant: 'Big', sessions: [{ platform: 'openai/chatgpt', n: 40 }] }, { 'x-readmarks-test-ip': '198.51.100.40' });
+  t(big.status === 400, 'an outside panel larger than 20 sessions is refused');
+  const nul = await J('/readmarks/1/panels', { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'null' });
+  t(nul.status === 400, 'a JSON body of null -> 400, not a server error', `HTTP ${nul.status}`);
+}
+
 console.log('\n== 7. Accidents and floods ==');
 { const p1 = await F('/readmarks/1/t/readmarks-1.0', OPENAI); const q = bank.find((x) => p1.text.includes(esc(x.q)));
   const right = [...p1.text.matchAll(/href="(\/readmarks\/1\/k\/[^"]+\/a\/\d)">([^<]+)<\/a>/g)].find((m) => m[2] === esc(q.options[q.answer]))[1];
@@ -197,8 +221,9 @@ console.log('\n== 7. Accidents and floods ==');
   const real = await F(right, OPENAI);
   t(pre.text.includes('prefetch') && real.text.includes('Step 2 of 2'), 'ATTACK a browser prefetches a marking link -> ignored; the real request still works'); }
 for (let i = 0; i < 24; i++) await linkMark(OPENAI, 'endorse');
-const fl = (await J('/readmarks/1/stats')).json.documents[0].field.platforms.find((p) => p.platform === 'openai/chatgpt-user');
-t(fl.counted === 20 && fl.logged >= 25, `ATTACK ${fl.logged} marks from one assistant in an hour -> ${fl.counted} counted (cap), and none of them moves a review rate`);
+const fl = (await J(`/readmarks/1/stats?now=${Date.now()}`)).json.documents[0].field.platforms.find((p) => p.platform === 'openai/chatgpt-user');
+// The cap is per UTC hour, so a run that crosses the hour may count up to 20 more in the new hour; the cap still bites.
+t(fl.logged >= 25 && fl.counted >= 20 && fl.counted < fl.logged && fl.counted <= 40, `ATTACK ${fl.logged} marks from one assistant in an hour -> ${fl.counted} counted (cap), and none of them moves a review rate`);
 
 console.log(`\n${fail ? fail + ' FAILED' : 'ALL ' + n + ' PASSED'}; log size ${await size()}`);
 fs.writeFileSync(dir + 'last-run.json', JSON.stringify({ later }));

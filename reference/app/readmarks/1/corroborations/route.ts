@@ -1,5 +1,7 @@
 // Attach a public transcript (a share link on the assistant's own site) to a mark.
-import { allow, clientIp } from '@/lib/guard';
+import { allow } from '@/lib/guard';
+import { addressKey } from '@/lib/readmarks/core';
+import { clientAddress } from '@/lib/readmarks/origins';
 import { corroborate } from '@/lib/readmarks/mark';
 import { errorPage, receiptPage } from '@/lib/readmarks/pages';
 import { fullReceipt, json, readBody, wantsHtml } from '../_shared';
@@ -11,7 +13,7 @@ export const maxDuration = 30;
 export async function POST(req: Request) {
   const html = wantsHtml(req);
   const fail = (status: number, reason: string) => (html ? errorPage(status === 404 ? 404 : 200, 'Transcript not attached', reason) : json(status, { error: reason }));
-  if (!allow(`readmarks-corr:${clientIp(req)}`, 20, 3600_000)) return fail(429, 'Too many attempts from this address. Try again later.');
+  if (!allow(`readmarks-corr:${addressKey(clientAddress(req) || 'unknown')}`, 20, 3600_000)) return fail(429, 'Too many attempts from this address. Try again later.');
   const raw = await readBody(req);
   if (!raw) return fail(413, 'Request too large.');
   let code = '', url = '';

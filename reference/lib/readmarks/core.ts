@@ -60,7 +60,17 @@ function secret(): Buffer {
 }
 
 /** Salted hash of the client address for rate limits only; the salt rotates daily and is never published. */
+/** An IPv6 user usually controls a whole /64, so limits treat the /64 as one address. */
+export function addressKey(ip: string): string {
+  if (!ip.includes(':') || ip.startsWith('::ffff:')) return ip.replace(/^::ffff:/, '');
+  const [head, tail] = ip.toLowerCase().split('::');
+  const h = head ? head.split(':') : [];
+  const groups = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - tail.split(':').filter(Boolean).length)).fill('0'), ...tail.split(':').filter(Boolean)];
+  return `${groups.slice(0, 4).map((g) => g || '0').join(':')}::/64`;
+}
+
 export function ipHash(ip: string, now = Date.now()): string {
+  ip = addressKey(ip);
   const day = new Date(now).toISOString().slice(0, 10);
   return crypto.createHmac('sha256', secret()).update(`readmarks-ip|${day}|${ip}`).digest('hex').slice(0, 32);
 }

@@ -4,7 +4,7 @@ import { ipHash } from './core';
 import { append, commit, countSince, entries, findByCode, findPriv, receiptFor, size, texts, type Entry, type Evidence, type Receipt } from './log';
 import { clientAddress, observe, originById, registry, transcriptPlatform, type Observation } from './origins';
 import { claim, release, setLeaf, ticketHash, type Stance } from './tickets';
-import { PROMPT_ID, SESSION_DAYS, STANDARD_PROMPT, claimSession, createSessions, newPanelId, panelSessions, releaseSession, sessionCommitment, setSessionLeaf, type Session } from './sessions';
+import { PROMPT_ID, SESSION_DAYS, STANDARD_PROMPT, getSession, claimSession, createSessions, newPanelId, panelSessions, releaseSession, sessionCommitment, setSessionLeaf, type Session } from './sessions';
 
 export const docById = (id: string) => RM_DOCUMENTS.find((d) => d.id === id) ?? null;
 export const docByUrl = (url: string) => RM_DOCUMENTS.find((d) => d.url === url || d.page === url) ?? null;
@@ -90,7 +90,11 @@ export const reviewPlatforms = () => registry().transcripts.map((t) => ({ id: t.
 const operatorOf = (platform: string | null) => (platform ? originById(platform)?.operator ?? registry().transcripts.find((t) => t.platform === platform)?.operator ?? null : null);
 const programmable = (platform: string | null) => !!(platform && (originById(platform) as { programmable?: boolean } | null)?.programmable);
 /** True when a request observed as `platform` came from the own, non-programmable infrastructure of the operator behind `assigned`. */
-export const fromAssigned = (platform: string | null, assigned: string) => !!platform && !programmable(platform) && !!operatorOf(platform) && operatorOf(platform) === operatorOf(assigned);
+export const fromAssigned = (platform: string | null, assigned: string) => {
+  if (!platform || programmable(platform) || !operatorOf(platform) || operatorOf(platform) !== operatorOf(assigned)) return false;
+  const row = originById(platform);
+  return !row || (row.eligible && row.kind !== 'crawler'); // transcript platforms have no origin row; crawlers never stand for an assistant
+};
 
 /** Registers a panel: N single-use sessions, each assigned to one assistant, logged BEFORE any of them can run. */
 export async function registerPanel(req: Request, docId: string, registrant: string, plan: { platform: string; n: number }[], byPublisher: boolean):
@@ -100,7 +104,8 @@ export async function registerPanel(req: Request, docId: string, registrant: str
   const known = new Set(reviewPlatforms().map((p) => p.id));
   const clean = plan.filter((x) => known.has(x.platform) && Number.isInteger(x.n) && x.n > 0);
   const total = clean.reduce((a, b) => a + b.n, 0);
-  if (!clean.length || total > 60) return { ok: false, status: 400, reason: 'register 1 to 60 sessions on assistants that have public share links (see /readmarks/1/origins)' };
+  const max = byPublisher ? 60 : 20;
+  if (!clean.length || total > max) return { ok: false, status: 400, reason: `register 1 to ${max} sessions on assistants that have public share links (see /readmarks/1/origins)` };
   if (!byPublisher) {
     const day = new Date(Date.now() - 86_400_000);
     if ((await countSince({ kind: 'panel', ip: ipHash(clientAddress(req) || 'unknown') }, day)) >= PANELS_PER_DAY_PER_ADDRESS) return { ok: false, status: 429, reason: 'this address has registered its panels for today; try again tomorrow' };
@@ -123,6 +128,9 @@ export async function recordSessionMark(req: Request, token: string, link: strin
     if (stance && e.entry.stance !== stance) return { ok: false, status: 409, reason: 'this session has already recorded its stance; a session records one mark' };
     return { ok: true, receipt: await receiptFor(e.index), fresh: false, observation: null };
   };
+  const s0 = await getSession(token);
+  const earlier = await prior(s0 && Object.prototype.hasOwnProperty.call(s0.links, link) ? s0.links[link] : undefined);
+  if (earlier) return earlier; // a session that already has a mark never gets a second one, even after an error
   const c = await claimSession(token, link);
   if (!c.ok) {
     if (c.reason === 'used') return (await prior(c.session?.links[link])) ?? { ok: false, status: 409, reason: 'session already used' };
@@ -135,6 +143,7 @@ export async function recordSessionMark(req: Request, token: string, link: strin
   try {
     const obs = await observe(req);
     if (obs.sigError) { await releaseSession(token); return { ok: false, status: 401, reason: `signature: ${obs.sigError}` }; }
+    if (!obs.eligible) { await releaseSession(token); return { ok: false, status: 403, reason: 'crawlers and indexers do not leave marks' }; }
     const doc = docById(sess.doc)!;
     const receipt = await append({
       type: 'mark', doc: { url: doc.url, sha256: doc.sha256 }, stance: c.stance, binding: 'session', shown: sess.shown, session: cm, panel: sess.panel,
@@ -261,7 +270,7 @@ let statsCache: { at: number; size: number; value: { logSize: number; documents:
 export async function stats(now?: number): Promise<{ logSize: number; documents: DocStats[] }> {
   const n = await size();
   // The figures are a pure function of the log (and of the clock, for deadlines): reuse them for a minute.
-  if (now === undefined && statsCache && statsCache.size === n && Date.now() - statsCache.at < 60_000) return statsCache.value;
+  if (now === undefined && statsCache && Date.now() - statsCache.at < 60_000) return statsCache.value; // at most one full read a minute per instance
   const value = await computeStats(n, now ?? Date.now());
   if (now === undefined) statsCache = { at: Date.now(), size: n, value };
   return value;

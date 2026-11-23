@@ -1,0 +1,315 @@
+{
+  "version": "2026-11-23",
+  "note": "Readmarks origin registry. Each row cites the operator's own page. 'eligible' is false for crawlers and indexers: they fetch without a principal asking, so they cannot leave marks. 'programmable' is true where anyone can script requests from that range through a metered API: such marks are attributed but never enter headline figures. Rows that share one address list are told apart by the User-Agent token (uaRequired).",
+  "origins": [
+    {
+      "id": "openai/chatgpt-user",
+      "operator": "OpenAI",
+      "product": "ChatGPT (fetches a page because a user asked)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "ua": [
+        "ChatGPT-User"
+      ],
+      "ipLists": [
+        "https://openai.com/chatgpt-user.json"
+      ],
+      "docs": "https://developers.openai.com/api/docs/bots",
+      "programmable": false
+    },
+    {
+      "id": "openai/chatgpt-agent",
+      "operator": "OpenAI",
+      "product": "ChatGPT cloud browser (hosted browser agent; signs its requests)",
+      "kind": "agent-browser",
+      "eligible": true,
+      "signatureAgent": [
+        "https://chatgpt.com"
+      ],
+      "docs": "https://help.openai.com/en/articles/11845367",
+      "programmable": false
+    },
+    {
+      "id": "openai/chatgpt-connectors",
+      "operator": "OpenAI",
+      "product": "ChatGPT connectors (MCP tool calls a user approved)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "ipLists": [
+        "https://openai.com/chatgpt-connectors.json"
+      ],
+      "docs": "https://developers.openai.com/api/docs/guides/ip-addresses",
+      "programmable": false
+    },
+    {
+      "id": "openai/oai-searchbot",
+      "operator": "OpenAI",
+      "product": "OAI-SearchBot (search index)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "OAI-SearchBot"
+      ],
+      "ipLists": [
+        "https://openai.com/searchbot.json"
+      ],
+      "docs": "https://developers.openai.com/api/docs/bots",
+      "programmable": false
+    },
+    {
+      "id": "openai/gptbot",
+      "operator": "OpenAI",
+      "product": "GPTBot (training crawler)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "GPTBot"
+      ],
+      "ipLists": [
+        "https://openai.com/gptbot.json"
+      ],
+      "docs": "https://developers.openai.com/api/docs/bots",
+      "programmable": false
+    },
+    {
+      "id": "anthropic/claude-user",
+      "operator": "Anthropic",
+      "product": "Claude (fetches a page because a user asked)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "ua": [
+        "Claude-User"
+      ],
+      "uaRequired": true,
+      "ipLists": [
+        "https://claude.com/crawling/bots.json"
+      ],
+      "docs": "https://support.claude.com/en/articles/8896518",
+      "programmable": false
+    },
+    {
+      "id": "anthropic/claude-crawlers",
+      "operator": "Anthropic",
+      "product": "ClaudeBot and Claude-SearchBot (crawlers)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "ClaudeBot",
+        "Claude-SearchBot"
+      ],
+      "ipLists": [
+        "https://claude.com/crawling/bots.json"
+      ],
+      "docs": "https://support.claude.com/en/articles/8896518",
+      "programmable": false
+    },
+    {
+      "id": "anthropic/claude-agent",
+      "operator": "Anthropic",
+      "product": "Claude-Agent (Anthropic-hosted browser)",
+      "kind": "agent-browser",
+      "eligible": true,
+      "ua": [
+        "Claude-Agent"
+      ],
+      "ipLists": [
+        "https://claude.com/.well-known/sail"
+      ],
+      "docs": "https://support.claude.com/en/articles/18234133",
+      "programmable": false
+    },
+    {
+      "id": "anthropic/api-tools",
+      "operator": "Anthropic",
+      "product": "Claude API tool calls (web fetch, web search, MCP connector)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "prefixes": [
+        "160.79.104.0/21",
+        "153.61.208.0/20"
+      ],
+      "docs": "https://platform.claude.com/docs/en/api/ip-addresses",
+      "programmable": true
+    },
+    {
+      "id": "google/google-agent",
+      "operator": "Google",
+      "product": "Google-Agent (agent acting for a user; signs a subset of requests)",
+      "kind": "agent-browser",
+      "eligible": true,
+      "ua": [
+        "Google-Agent"
+      ],
+      "ipLists": [
+        "https://developers.google.com/static/crawling/ipranges/user-triggered-agents.json"
+      ],
+      "signatureAgent": [
+        "https://agent.bot.goog"
+      ],
+      "docs": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers",
+      "programmable": false
+    },
+    {
+      "id": "google/user-triggered-fetchers",
+      "operator": "Google",
+      "product": "Google user-triggered fetchers (NotebookLM and others)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "ua": [
+        "Google-"
+      ],
+      "ipLists": [
+        "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json",
+        "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json"
+      ],
+      "docs": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers",
+      "programmable": false
+    },
+    {
+      "id": "google/googlebot",
+      "operator": "Google",
+      "product": "Googlebot (search crawler)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "Googlebot"
+      ],
+      "rdns": [
+        "googlebot.com"
+      ],
+      "docs": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers",
+      "programmable": false
+    },
+    {
+      "id": "perplexity/perplexity-user",
+      "operator": "Perplexity",
+      "product": "Perplexity (fetches a page because a user asked)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "ua": [
+        "Perplexity-User"
+      ],
+      "ipLists": [
+        "https://www.perplexity.ai/perplexity-user.json"
+      ],
+      "docs": "https://docs.perplexity.ai/guides/bots",
+      "programmable": false
+    },
+    {
+      "id": "perplexity/perplexitybot",
+      "operator": "Perplexity",
+      "product": "PerplexityBot (search index)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "PerplexityBot"
+      ],
+      "ipLists": [
+        "https://www.perplexity.ai/perplexitybot.json"
+      ],
+      "docs": "https://docs.perplexity.ai/guides/bots",
+      "programmable": false
+    },
+    {
+      "id": "mistral/mistralai-user",
+      "operator": "Mistral AI",
+      "product": "Le Chat (fetches a page because a user asked)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "ua": [
+        "MistralAI-User"
+      ],
+      "ipLists": [
+        "https://mistral.ai/mistralai-user-ips.json"
+      ],
+      "docs": "https://docs.mistral.ai/robots",
+      "programmable": false
+    },
+    {
+      "id": "amazon/amzn-user",
+      "operator": "Amazon",
+      "product": "Amzn-User (fetches a page because a user asked)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "ua": [
+        "Amzn-User"
+      ],
+      "ipLists": [
+        "https://developer.amazon.com/amazonbot/live-ip-addresses/"
+      ],
+      "docs": "https://developer.amazon.com/amazonbot",
+      "programmable": false
+    },
+    {
+      "id": "duckduckgo/duckassistbot",
+      "operator": "DuckDuckGo",
+      "product": "DuckAssistBot (answer crawler)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "DuckAssistBot"
+      ],
+      "ipLists": [
+        "https://duckduckgo.com/duckassistbot.json"
+      ],
+      "docs": "https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot",
+      "programmable": false
+    },
+    {
+      "id": "microsoft/bingbot",
+      "operator": "Microsoft",
+      "product": "Bingbot (search crawler)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "bingbot"
+      ],
+      "ipLists": [
+        "https://www.bing.com/toolbox/bingbot.json"
+      ],
+      "rdns": [
+        "search.msn.com"
+      ],
+      "docs": "https://www.bing.com/webmasters/help/which-crawlers-does-bing-use-8c184ec0",
+      "programmable": false
+    },
+    {
+      "id": "apple/applebot",
+      "operator": "Apple",
+      "product": "Applebot (search crawler)",
+      "kind": "crawler",
+      "eligible": false,
+      "ua": [
+        "Applebot"
+      ],
+      "ipLists": [
+        "https://search.developer.apple.com/applebot.json"
+      ],
+      "rdns": [
+        "applebot.apple.com"
+      ],
+      "docs": "https://support.apple.com/en-us/119829",
+      "programmable": false
+    }
+  ],
+  "transcripts": [
+    {
+      "platform": "openai/chatgpt",
+      "operator": "OpenAI",
+      "pattern": "^https://chatgpt\\.com/share/(e/)?[0-9a-fA-F-]{20,64}$",
+      "docs": "https://help.openai.com/en/articles/7925741-chatgpt-shared-links-faq"
+    },
+    {
+      "platform": "anthropic/claude",
+      "operator": "Anthropic",
+      "pattern": "^https://claude\\.ai/share/[0-9a-fA-F-]{20,64}$",
+      "docs": "https://support.claude.com/en/articles/10593882-sharing-and-unsharing-chats"
+    },
+    {
+      "platform": "google/gemini",
+      "operator": "Google",
+      "pattern": "^https://(g\\.co/gemini/share|gemini\\.google\\.com/share)/[0-9A-Za-z_-]{6,64}$",
+      "docs": "https://support.google.com/gemini/answer/13743730"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+.DS_Store
+node_modules/
+.env*
+*.key
+tests/agent-key.json
+tests/transcripts.json
+tests/last-run.json
+tests/question-bank.json
+__pycache__/

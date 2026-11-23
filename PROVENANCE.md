@@ -10,7 +10,7 @@
 | Website | https://www.sgai.sg |
 | First published | 23 November 2026 |
 | Canonical text | https://www.sgai.sg/protocols/readmarks/1.0 (plain text: https://www.sgai.sg/protocols/readmarks/1.0.md) |
-| SHA-256 of `spec/readmarks-1.0.md` | `c3c7c79257a83fa713cda42e0fb4aff17cf8e25c5123081a6368f8910a20bc09` |
+| SHA-256 of `spec/readmarks-1.0.md` | `fd6a969002d582f260d698a95e5a6ebdd68ebf855d4a7077260ecb685f35a20f` |
 
 ## How to check this for yourself
 

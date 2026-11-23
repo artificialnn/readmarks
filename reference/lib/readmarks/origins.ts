@@ -154,8 +154,12 @@ export type Observation = {
 export function clientAddress(req: Request): string {
   // Test hook, never active in production builds: lets the test suite present a request as coming from a given address.
   if (process.env.NODE_ENV !== 'production' && process.env.READMARKS_TEST_HOOKS === '1' && req.headers.get('x-readmarks-test-ip')) return String(req.headers.get('x-readmarks-test-ip'));
-  return (req.headers.get('x-real-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0] ?? '').trim();
+  // On Vercel these headers are written by the platform, never by the client; x-vercel-forwarded-for cannot be overwritten by a proxy in between.
+  return (req.headers.get('x-vercel-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0] ?? '').trim();
 }
+
+const originOf = (u: string) => { try { return new URL(u).origin; } catch { return ''; } };
+const SIGNERS = [...new Set(REG.origins.flatMap((o) => o.signatureAgent ?? []).map(originOf).filter(Boolean))];
 
 /** What can we say about where this request came from? */
 export async function observe(req: Request, body: Buffer = Buffer.alloc(0)): Promise<Observation> {
@@ -163,13 +167,14 @@ export async function observe(req: Request, body: Buffer = Buffer.alloc(0)): Pro
   let platform: string | null = null, entry: Origin | null = null, needsRefresh = false, sigError: string | undefined;
   const ua = (req.headers.get('user-agent') ?? '').slice(0, 300);
 
-  const sig = await verifyRequest(req, body);
-  if (sig && !sig.ok) sigError = sig.reason;
-  if (sig?.ok) {
-    const e: SigEvidence = sig.evidence;
-    entry = REG.origins.find((o) => (o.signatureAgent ?? []).some((s) => { try { return new URL(s).origin === e.agent; } catch { return false; } })) ?? null;
-    platform = entry?.id ?? `signed:${e.agent}`;
-    evidence.push({ type: 'origin-signature', platform, ...e });
+  const sig = await verifyRequest(req, body, SIGNERS);
+  if (sig && !sig.ok && !sig.ignored) sigError = sig.reason;
+  const sigEv: SigEvidence | null = sig?.ok ? sig.evidence : null;
+  const sigRow = sigEv ? REG.origins.find((o) => (o.signatureAgent ?? []).some((x) => originOf(x) === sigEv.agent)) ?? null : null;
+  if (sigEv?.bindsPath && sigRow) {
+    // Covers this exact URL: public proof for this request, and the URL is single-use, so it cannot be replayed.
+    entry = sigRow; platform = sigRow.id;
+    evidence.push({ type: 'origin-signature', platform, ...sigEv });
   }
 
   const uaHas = (o: Origin) => (o.ua ?? []).some((t) => ua.toLowerCase().includes(t.toLowerCase()));
@@ -211,9 +216,16 @@ export async function observe(req: Request, body: Buffer = Buffer.alloc(0)): Pro
       }
     }
   }
-  // A signature is public proof for THIS request only if it covers the path; otherwise it is something we checked, like an address.
+  if (sigEv && !sigEv.bindsPath && sigRow) {
+    // An authority-only signature is the same for every request to this site, so whoever has seen one can replay it.
+    // It never stands alone: it is noted beside a network match for the same operator, and its value is not published.
+    const net = evidence.find((x) => x.type === 'origin-network');
+    const corroborated = !!net && originById(String(net.platform))?.operator === sigRow.operator;
+    evidence.push({ type: 'origin-signature', platform: sigRow.id, agent: sigEv.agent, keyid: sigEv.keyid, created: sigEv.created, expires: sigEv.expires,
+      covered: sigEv.components.map((c) => c[0]), tag: sigEv.tag, bindsPath: false, corroborated });
+  }
   const proven = evidence.some((x) => x.type === 'origin-signature' && x.bindsPath === true);
-  const observed = evidence.some((x) => x.type === 'origin-network' || x.type === 'origin-signature');
+  const observed = evidence.some((x) => x.type === 'origin-network');
   return { platform, operator: entry?.operator ?? null, kind: entry?.kind ?? null, eligible: entry ? entry.eligible : true,
     assurance: proven ? 'proven' : observed ? 'observed' : 'declared', evidence, sigError, needsRefresh };
 }

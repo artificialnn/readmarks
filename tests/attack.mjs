@@ -19,6 +19,8 @@ const OPENAI = { ip: await first('https://openai.com/chatgpt-user.json'), ua: 'M
 const ANTHROPIC_IP = await first('https://claude.com/crawling/bots.json');
 const CLAUDE = { ip: ANTHROPIC_IP, ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)' };
 const NOBODY = { ip: '203.0.113.77', ua: 'curl/8.7.1' };
+const GAGENT = { ip: await first('https://developers.google.com/static/crawling/ipranges/user-triggered-agents.json'), ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Safari/537.36 Google-Agent' };
+const GCP = { ip: await first('https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json'), ua: 'python-requests/2.32' };
 const API = { ip: '160.79.104.10', ua: 'python-httpx/0.27' };
 const code = (s) => (/RM1-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}/.exec(s) || [null])[0];
 const size = async () => Number((await F('/readmarks/1/log/checkpoint')).text.split('\n')[1]);
@@ -107,14 +109,21 @@ t(good.status === 201 && ra2.transcripts.length === 1, 'the genuine transcript (
 console.log('\n== 5. Signed requests ==');
 const sg = await linkMark(OPENAI, 'endorse', { sign: (p) => sign(p) }); const rsg = await receipt(sg.code);
 t(rsg.entry.assurance === 'proven' && rsg.entry.evidence.some((e) => e.type === 'origin-signature' && e.bindsPath), 'a path-bound Web Bot Auth signature -> proven', sg.code);
-const au = await linkMark(NOBODY, 'endorse', { sign: (p) => sign(p, { agent: 'https://agent.bot.goog', dict: true, bindPath: false }) }); const rau = await receipt(au.code);
-t(rau.entry.assurance === 'observed' && rau.entry.platform === 'google/google-agent' && rau.entry.evidence.some((e) => e.type === 'origin-signature' && e.bindsPath === false), 'a Google-style signature (dictionary form, authority only) -> observed, not proven');
+const authOnly = sign('/', { agent: 'https://agent.bot.goog', dict: true, bindPath: false });   // the same headers fit every URL on the site
+const au = await linkMark(GAGENT, 'endorse', { sign: () => authOnly }); const rau = await receipt(au.code);
+const auEv = rau.entry.evidence.find((e) => e.type === 'origin-signature');
+t(rau.entry.assurance === 'observed' && rau.entry.platform === 'google/google-agent' && auEv.bindsPath === false && auEv.corroborated === true && !('signature' in auEv) && !('params' in auEv),
+  'a Google-style signature (dictionary form, authority only) from Google\'s own agent range -> observed; the signature value is not published');
+const rep = await linkMark(NOBODY, 'endorse', { sign: () => authOnly }); const rrep = await receipt(rep.code);
+t(rrep.entry.assurance === 'declared' && rrep.entry.platform === null && rrep.entry.evidence.find((e) => e.type === 'origin-signature').corroborated === false,
+  'ATTACK replay that authority-only signature from an ordinary server -> declared, attributed to nobody');
 const bad = await linkMark(NOBODY, 'endorse', { sign: (p) => sign(p, { badSig: true }) });
 t(!bad.code && bad.text.includes('signature'), 'ATTACK forged signature bytes -> no mark');
 const replayT = await linkMark(NOBODY, 'endorse', { sign: () => sign(sg.stanceLinks.endorse) });
 t(!replayT.code, 'ATTACK replay a signature made for another mark\'s URL -> does not verify for this URL');
 const unreg = await linkMark(NOBODY, 'endorse', { sign: (p) => sign(p, { agent: 'https://unregistered-agent.example' }) }); const run = await receipt(unreg.code);
-t(run.entry.platform === 'signed:https://unregistered-agent.example', 'a valid signature from an unregistered signer is shown as that domain, not as a known assistant', run.entry.platform);
+t(run.entry.assurance === 'declared' && run.entry.platform === null && !run.entry.evidence.some((e) => e.type === 'origin-signature'),
+  'ATTACK a signer outside the registry names its own key server -> signature ignored, no outbound fetch, mark is declared');
 
 console.log('\n== 6. Registered reviews: the attacks that target the headline ==');
 const disc = (await J('/.well-known/readmarks.json')).json;
@@ -167,6 +176,19 @@ t(SB.registered === 20 && SB.rate === 0 && Math.abs(P.rate - 0.5) < 1e-9 && Math
   'ATTACK sabotage: a stranger registers 20 sessions under a borrowed name and abandons them -> its own row reads 0 of 20; nobody else\'s rate moves');
 t(SB.registeredBy === 'other' && find(rv, 'openai/chatgpt', liar.json.panel).registeredBy === 'other' && rv.filter((r) => r.panel === null).length === 1,
   'ATTACK claim to be the publisher without its key -> listed as an unverified outside panel');
+
+const gcpMark = await linkMark(GCP, 'endorse'); const rg = await receipt(gcpMark.code);
+const gpan = await post({ doc: 'readmarks-1.0', registrant: 'Rented cloud box', sessions: [{ platform: 'google/gemini', n: 1 }] });
+const GS = withPaths(gpan.json); await run1(GS[0], GCP, 'endorse');
+const grow = find(await rows(), 'google/gemini', gpan.json.panel);
+t(rg.entry.platform === 'google/cloud-user-fetchers' && grow.resolved === 1 && grow.outcomes.none === 1 && grow.outcomes.endorse === 0,
+  'ATTACK rent a Google Cloud server inside a range Google publishes -> attributed to the cloud range, not to Gemini; its review session counts as "none"');
+{ const LS = withPaths(liar.json)[0]; await F(LS.path, OPENAI); const n0 = await size();
+  const p1 = await F(`${LS.path}/s/__proto__`, OPENAI), p2 = await F(`${LS.path}/s/constructor`, OPENAI), p3 = await F(`${LS.path}/s/toString`, OPENAI);
+  t([p1, p2, p3].every((r) => r.status === 404 && !code(r.text)) && (await size()) === n0, 'ATTACK session link named __proto__ / constructor -> not found, nothing written to the log'); }
+{ const k1 = await J('/readmarks/1/tickets', { method: 'POST', body: JSON.stringify({ doc: 'readmarks-1.0' }), headers: { 'content-type': 'application/json' }, ...OPENAI });
+  const k2 = await J('/readmarks/1/tickets', { method: 'POST', body: JSON.stringify({ doc: 'readmarks-1.0' }), headers: { 'content-type': 'application/json' }, ...NOBODY });
+  t(k1.json.seenAs.platform === 'openai/chatgpt-user' && k1.json.seenAs.assurance === 'observed' && k2.json.seenAs.platform === null, 'a ticket says how its request was seen (so a client can tell what its mark will be worth)'); }
 
 console.log('\n== 7. Accidents and floods ==');
 { const p1 = await F('/readmarks/1/t/readmarks-1.0', OPENAI); const q = bank.find((x) => p1.text.includes(esc(x.q)));

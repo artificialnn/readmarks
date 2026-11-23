@@ -82,8 +82,9 @@ export async function openSession(token: string, platform: string | null, foreig
 export async function claimSession(token: string, link: string): Promise<{ ok: true; session: Session; stance: Stance } | { ok: false; reason: 'unknown' | 'bad-link' | 'expired' | 'not-opened' | 'used'; session: Session | null }> {
   const s = await getSession(token);
   if (!s) return { ok: false, reason: 'unknown', session: null };
-  const stance = s.links[link];
-  if (!stance) return { ok: false, reason: 'bad-link', session: s };
+  // Own properties only: "constructor" or "__proto__" in the URL must not resolve to anything.
+  const stance = Object.prototype.hasOwnProperty.call(s.links, link) ? s.links[link] : undefined;
+  if (!stance || !(STANCES as readonly string[]).includes(stance)) return { ok: false, reason: 'bad-link', session: s };
   if (s.state === 'marked') return { ok: false, reason: 'used', session: s };
   if (Date.now() > new Date(s.deadline).getTime()) return { ok: false, reason: 'expired', session: s };
   if (s.state !== 'opened') return { ok: false, reason: 'not-opened', session: s };

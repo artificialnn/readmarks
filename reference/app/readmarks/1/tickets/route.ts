@@ -28,5 +28,6 @@ export async function POST(req: Request) {
   if (!t) return json(503, { error: 'this document has no reading check yet' });
   const q = question(t);
   return json(201, { ticket: t._id, expires: new Date(new Date(t.createdAt).getTime() + TICKET_TTL_MS).toISOString(), document: { url: doc.url, sha256: doc.sha256 },
-    question: { text: q.text, options: q.options, answerWith: 'the 1-based position of one option; one attempt' }, stances: t.shown });
+    question: { text: q.text, options: q.options, answerWith: 'the 1-based position of one option; one attempt' }, stances: t.shown,
+    seenAs: { platform: obs.platform, assurance: obs.assurance } });
 }

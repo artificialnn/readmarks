@@ -20,7 +20,7 @@ export type SigEvidence = {
   tag: string | null;
   bindsPath: boolean;          // true when the signature covers @path or @target-uri, so it commits to this exact URL
 };
-export type SigResult = { ok: true; evidence: SigEvidence } | { ok: false; reason: string } | null; // null = no signature present
+export type SigResult = { ok: true; evidence: SigEvidence } | { ok: false; reason: string; ignored?: boolean } | null; // null = no signature present; ignored = signer not in the registry
 
 const MAX_WINDOW_S = 86_400; // single-use tickets, not short windows, stop replays; agents in the field sign for up to an hour
 const DIR_PATH = '/.well-known/http-message-signatures-directory';
@@ -152,13 +152,14 @@ export function signatureBase(components: [string, string][], params: string): B
 }
 
 /**
- * Verify the request's signature. `body` is the exact raw request body (empty for GET).
+ * Verify the request's signature. `body` is the exact raw request body (empty for GET). `allowedAgents` are the
+ * signer origins of the origin registry.
  * Required coverage follows the IETF draft (draft-ietf-webbotauth-httpsig-protocol): @authority or @target-uri, and
  * signature-agent when that header is sent; with a body we also require content-digest.
  * `bindsPath` says whether the signature also commits to this exact URL (@path or @target-uri): only then is it
  * evidence for one particular request that a third party can check.
  */
-export async function verifyRequest(req: Request, body: Buffer, now = Date.now()): Promise<SigResult> {
+export async function verifyRequest(req: Request, body: Buffer, allowedAgents: string[], now = Date.now()): Promise<SigResult> {
   const si = req.headers.get('signature-input');
   const sg = req.headers.get('signature');
   const sa = req.headers.get('signature-agent');
@@ -210,8 +211,11 @@ export async function verifyRequest(req: Request, body: Buffer, now = Date.now()
 
   const dir = agentDirectory(sa, agentKey, input.label);
   if (!dir) return { ok: false, reason: 'signature-agent must name an https origin' };
+  // We fetch key directories only for signers listed in the origin registry. A directory named by an unknown party
+  // would be an outbound request an attacker controls, so such a signature is ignored: the request counts as unsigned.
+  if (!allowedAgents.includes(dir.origin)) return { ok: false, reason: 'signer is not in the origin registry', ignored: true };
   let keys: Jwk[];
-  try { keys = await fetchDirectory(dir); } catch (e) { return { ok: false, reason: `key directory: ${(e as Error).message}` }; }
+  try { keys = await fetchDirectory(dir); } catch { return { ok: false, reason: 'the signer\'s key directory could not be read' }; }
   const jwk = keys.find((k) => k?.kty === 'OKP' && k?.crv === 'Ed25519' && typeof k?.x === 'string' && thumbprint(k) === input.params.keyid);
   if (!jwk) return { ok: false, reason: 'keyid not found in the key directory' };
   const pub = crypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: jwk.x as string }, format: 'jwk' });

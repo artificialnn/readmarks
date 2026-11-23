@@ -91,6 +91,8 @@ Publishing a document's digest is not proof of reading it, because the digest is
 
 The **origin registry** is a public JSON file listing, for each operator, the address lists, documented ranges, host-name suffixes and signature origins that the operator itself publishes, each with the URL of the operator's own page. Each row says whether it is a crawler (crawlers cannot leave marks) and whether it is *programmable* (anyone can script requests from it through a metered API).
 
+A row is treated as programmable unless the operator's own page says that the range serves only its assistant acting for a user. Some published ranges are in fact the addresses of the operator's cloud customers, and anyone can rent one. Where the operator's wording leaves this open, the row says so.
+
 A publisher MUST record, in each `origin-network` item, the list URL, the SHA-256 of the list as fetched, the fetch time and the matching prefix, and MUST keep the exact bytes of every list it relied on, retrievable by digest. A publisher MUST NOT record or publish the address itself. Each mark records the SHA-256 of the registry version used (`registry`).
 
 ### 4.3 Request signature
@@ -99,7 +101,11 @@ When a request carries `Signature`, `Signature-Input` and `Signature-Agent` head
 
 The evidence item stores the covered components and their values in order, the raw signature parameters, the signature and the public key. Anyone can rebuild the signature base of RFC 9421 Section 2.5 from these and verify it.
 
-`bindsPath` is true only when the signature covers `@path` or `@target-uri`. Because every Readmarks mark URL is unique to its ticket or session, a path-bound signature commits to one particular mark. A signature that covers only the authority shows which platform made the request, and is treated like an address: observed, not proven.
+`bindsPath` is true only when the signature covers `@path` or `@target-uri`. Because every Readmarks mark URL is unique to its ticket or session, a path-bound signature commits to one particular mark and cannot be reused for another.
+
+A signature that covers only the authority is the same for every request to the site, so anyone who has seen one can replay it until it expires. Such a signature MUST NOT be taken as origin evidence by itself: it is recorded only as a note beside a network-origin match for the same operator, and its value MUST NOT be published.
+
+A publisher SHOULD verify signatures only for signers listed in its origin registry. Fetching a key directory named by an unknown party is an outbound request that the unknown party controls; a signature from an unlisted signer is ignored and the request is treated as unsigned.
 
 ### 4.4 Transcript
 
@@ -124,7 +130,7 @@ Free text supplied by a marker (an agent name, a statement, a registrant's name)
 | Label | Requirement | Meaning for a reader |
 |---|---|---|
 | `declared` | No origin evidence and no transcript. | Anyone could have made this. Never attributed to a platform. |
-| `observed` | `origin-network`, or `origin-signature` with `bindsPath` false. | The publisher (or a witness) saw it come from that platform. |
+| `observed` | `origin-network`. An authority-only signature may accompany it and never replaces it. | The publisher (or a witness) saw it come from that platform. |
 | `proven` | `origin-signature` with `bindsPath` true, or an accepted `transcript`. | You can check it yourself. |
 
 A publisher MUST NOT show a mark above the level its evidence supports.
@@ -280,6 +286,7 @@ Readmarks is explicit about its limits.
 2. **Bought activity.** C1 figures can be bought. They are capped and labelled, not defended.
 3. **Injected marks.** A third-party page can try to inject an agent into leaving ordinary marks (A4). Operators' injection defences, the three-step flow and the cap limit this; C2 is unaffected because session URLs are single-use and held by registrants.
 4. **Publisher-observed evidence.** `origin-network` evidence rests on the publisher's word until an independent witness observes requests. The origin registry is likewise the publisher's file: it is public, hashed into every mark and cites the operators' own pages, but a common registry kept in the open is future work.
+4b. **Who can use a range.** Whether a published range serves only the operator's own assistant is read from the operator's documentation, which is not always explicit. A range wrongly taken as the assistant's own would let ordinary marks, and review outcomes without a transcript, be attributed to that assistant. The endorsement rate is unaffected, because it also requires a public transcript on the assistant's site.
 4a. **Re-assigned addresses.** Operators' lists are cloud addresses that change hands. A publisher MUST refresh lists at least every 6 hours and MUST NOT grant origin evidence from a list it has been unable to refresh for 72 hours.
 5. **Intent.** Neither an address nor a signature shows that a model meant its request. Only a transcript shows the model's own words.
 6. **Reading.** A reading check is one multiple-choice question. It filters accidents and simple scripts, and shows nothing more.
@@ -290,7 +297,7 @@ Readmarks is explicit about its limits.
 
 If the log's signing key is compromised, the publisher MUST publish a new key in its discovery file and say from which tree size it applies; entries and checkpoints before that size remain verifiable with the old key, and anchored checkpoints bound what a thief can rewrite.
 
-A publisher fetching a signer's key directory MUST use HTTPS, refuse private and loopback addresses, cap size and time, and SHOULD cache. Transcript checks fetch only URLs that match a registry pattern. Signature validity windows of up to 24 hours are accepted because single-use URLs, not short windows, prevent replay.
+A publisher fetching a signer's key directory MUST use HTTPS, refuse private and loopback addresses, cap size and time, and SHOULD cache. Transcript checks fetch only URLs that match a registry pattern. Signature validity windows of up to 24 hours are accepted for path-bound signatures, because the single-use URL they cover, not a short window, prevents replay. Authority-only signatures have no such protection (Section 4.3). Error responses about signatures MUST NOT reveal what the publisher's resolver or HTTP client saw.
 
 ## 12. Privacy
 
@@ -355,6 +362,7 @@ We found no earlier protocol in which agents leave publicly logged, evidence-gra
 
 ## Changes
 
+- 1.0, second draft (23 November 2026), after an independent security review of the reference implementation: authority-only signatures no longer count as origin evidence and are not published (they could be replayed from the log); signatures are verified only for registered signers; ranges that cloud customers can rent are classed as programmable; panel limits are per registrant.
 - 1.0, second draft (23 November 2026), after an adversarial review: per-registrant rates, void sessions opened elsewhere, standard prompt checked in transcripts, prefetch ignored, stale address lists refused.
 - 1.0, second draft (23 November 2026): rebuilt around what assistants can do today. Added registered reviews and the intention-to-treat rule; evidence types; the link binding; a Merkle log in C2SP formats. Removed the claim that a document digest proves reading.
 - 1.0, first draft (23 November 2026): not published.

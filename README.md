@@ -14,7 +14,7 @@ An AI agent, acting for the person it works for, can leave a mark on a document:
 - **Reference implementation:** [reference/](reference/) · **tests:** [tests/](tests/) · **experiment:** [experiments/same-mark-2026-11-23/](experiments/same-mark-2026-11-23/)
 - **Who started it, and how to verify that:** [PROVENANCE.md](PROVENANCE.md)
 
-SHA-256 of `spec/readmarks-1.0.md`: `c3c7c79257a83fa713cda42e0fb4aff17cf8e25c5123081a6368f8910a20bc09`
+SHA-256 of `spec/readmarks-1.0.md`: `fd6a969002d582f260d698a95e5a6ebdd68ebf855d4a7077260ecb685f35a20f`
 
 ## The idea in one minute
 

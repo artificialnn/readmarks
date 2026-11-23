@@ -9,8 +9,10 @@ import { PROMPT_ID, SESSION_DAYS, STANDARD_PROMPT, claimSession, createSessions,
 export const docById = (id: string) => RM_DOCUMENTS.find((d) => d.id === id) ?? null;
 export const docByUrl = (url: string) => RM_DOCUMENTS.find((d) => d.url === url || d.page === url) ?? null;
 
+const ALL: Stance[] = ['read', 'endorse', 'qualified', 'decline', 'object'];
 export const DECLARED_PER_HOUR = 200;
-export const PANELS_PER_DAY = 40;
+export const PANELS_PER_DAY_PER_ADDRESS = 5;
+export const PANELS_PER_DAY = 300; // backstop against log bloat only; the per-address cap is the working limit
 
 export type MarkResult =
   | { ok: true; receipt: Receipt; fresh: boolean; observation: Observation | null }
@@ -99,7 +101,11 @@ export async function registerPanel(req: Request, docId: string, registrant: str
   const clean = plan.filter((x) => known.has(x.platform) && Number.isInteger(x.n) && x.n > 0);
   const total = clean.reduce((a, b) => a + b.n, 0);
   if (!clean.length || total > 60) return { ok: false, status: 400, reason: 'register 1 to 60 sessions on assistants that have public share links (see /readmarks/1/origins)' };
-  if (!byPublisher && (await countSince({ kind: 'panel' }, new Date(Date.now() - 86_400_000))) >= PANELS_PER_DAY) return { ok: false, status: 429, reason: 'the daily allowance for new panels is used up; try again tomorrow' };
+  if (!byPublisher) {
+    const day = new Date(Date.now() - 86_400_000);
+    if ((await countSince({ kind: 'panel', ip: ipHash(clientAddress(req) || 'unknown') }, day)) >= PANELS_PER_DAY_PER_ADDRESS) return { ok: false, status: 429, reason: 'this address has registered its panels for today; try again tomorrow' };
+    if ((await countSince({ kind: 'panel' }, day)) >= PANELS_PER_DAY) return { ok: false, status: 429, reason: 'the daily allowance for new panels is used up; try again tomorrow' };
+  }
   const panel = newPanelId();
   const sessions = await createSessions(panel, docId, clean);
   const who = commit(registrant);
@@ -125,6 +131,7 @@ export async function recordSessionMark(req: Request, token: string, link: strin
     return { ok: false, status: 409, reason: 'open the session page first' };
   }
   const sess = c.session;
+  if (!ALL.includes(c.stance)) { await releaseSession(token); return { ok: false, status: 404, reason: 'no such session link' }; }
   try {
     const obs = await observe(req);
     if (obs.sigError) { await releaseSession(token); return { ok: false, status: 401, reason: `signature: ${obs.sigError}` }; }
@@ -221,7 +228,6 @@ function sessionTokenShown(commitment: string, body: string): string | null {
 // ---- counting rules ----------------------------------------------------------------------------------------------
 // Everything below is computed from the public log alone, exactly as an outside auditor would compute it.
 export const COUNT_CAP_PER_HOUR = 20;
-const ALL: Stance[] = ['read', 'endorse', 'qualified', 'decline', 'object'];
 
 /** Wilson score interval (95%) for k successes in n trials. */
 export function wilson(k: number, n: number): [number, number] | null {
@@ -262,7 +268,9 @@ export async function stats(now?: number): Promise<{ logSize: number; documents:
 }
 
 async function computeStats(n: number, now: number): Promise<{ logSize: number; documents: DocStats[] }> {
-  const all = n ? await entries(0, 50_000) : [];
+  // The whole log, read in pages: figures must never be computed from a truncated log.
+  const all: Awaited<ReturnType<typeof entries>> = [];
+  for (let from = 0; from < n; from += 2000) all.push(...(await entries(from, 2000)));
   const blank = () => Object.fromEntries(ALL.map((x) => [x, 0])) as Record<Stance, number>;
   const out: DocStats[] = RM_DOCUMENTS.map((d) => ({ id: d.id, url: d.url, sha256: d.sha256, reviews: [], reviewTranscripts: [],
     field: { totals: Object.fromEntries(ALL.map((x) => [x, { declared: 0, observed: 0, proven: 0 }])) as DocStats['field']['totals'], platforms: [] } }));
@@ -301,7 +309,7 @@ async function computeStats(n: number, now: number): Promise<{ logSize: number; 
       const valid = m.e.assurance !== 'declared' && fromAssigned((m.e.platform as string | null) ?? null, sx.platform)
         && fromAssigned((sev?.openedFrom as string | null) ?? null, sx.platform) && Number(sev?.foreignOpensBeforeMark ?? 0) === 0;
       const st = m.e.stance as Stance;
-      row.outcomes[valid ? st : 'none']++;
+      row.outcomes[valid && ALL.includes(st) ? st : 'none']++;
       const ts = (transcriptsFor.get(m.hash) ?? []).filter((t) => t.prompt && operatorOf(t.platform) === operatorOf(sx.platform));
       if (valid && ts.length) {
         if (st === 'endorse') row.endorsedWithTranscript++;
@@ -318,6 +326,7 @@ async function computeStats(n: number, now: number): Promise<{ logSize: number; 
     const d = docOf(x.entry);
     if (!d) continue; // a mark on another version of the text: logged, not shown against this one
     const e = x.entry as Entry & { stance: Stance; platform: string | null; assurance: 'declared' | 'observed' | 'proven' };
+    if (!ALL.includes(e.stance) || !['declared', 'observed', 'proven'].includes(e.assurance)) continue; // never trust a malformed entry
     const level = (transcriptsFor.get(x.leafHash) ?? []).length ? 'proven' : e.assurance;
     d.field.totals[e.stance][level]++;
     if (level === 'declared' || !e.platform) continue;

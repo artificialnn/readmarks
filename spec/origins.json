@@ -1,6 +1,6 @@
 {
-  "version": "2026-11-23",
-  "note": "Readmarks origin registry. Each row cites the operator's own page. 'eligible' is false for crawlers and indexers: they fetch without a principal asking, so they cannot leave marks. 'programmable' is true where anyone can script requests from that range through a metered API: such marks are attributed but never enter headline figures. Rows that share one address list are told apart by the User-Agent token (uaRequired).",
+  "version": "2026-11-23b",
+  "note": "Readmarks origin registry. Each row cites the operator's own page. 'eligible' is false for crawlers and indexers: they fetch without a principal asking, so they cannot leave marks. 'programmable' is true where a member of the public can originate requests from that range through an API, a cloud account or a tool they define: such marks are attributed, shown apart, and never enter a headline or a review outcome. A row is programmable unless the operator's page says the range serves only its own assistant acting for a user; where that is uncertain the row says so. Rows that share one address list are told apart by the User-Agent token (uaRequired). Request signatures are verified only for the signer origins listed here.",
   "origins": [
     {
       "id": "openai/chatgpt-user",
@@ -32,14 +32,14 @@
     {
       "id": "openai/chatgpt-connectors",
       "operator": "OpenAI",
-      "product": "ChatGPT connectors (MCP tool calls a user approved)",
+      "product": "ChatGPT connectors and GPT Actions (tool calls to endpoints a developer defines)",
       "kind": "user-triggered",
       "eligible": true,
       "ipLists": [
         "https://openai.com/chatgpt-connectors.json"
       ],
       "docs": "https://developers.openai.com/api/docs/guides/ip-addresses",
-      "programmable": false
+      "programmable": true
     },
     {
       "id": "openai/oai-searchbot",
@@ -147,23 +147,35 @@
         "https://agent.bot.goog"
       ],
       "docs": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers",
-      "programmable": false
+      "programmable": false,
+      "uncertain": "Google does not say whether developer-built agents share this range with Google's own; treated as Google's own until shown otherwise."
     },
     {
-      "id": "google/user-triggered-fetchers",
+      "id": "google/user-triggered-fetchers-google",
       "operator": "Google",
-      "product": "Google user-triggered fetchers (NotebookLM and others)",
+      "product": "Google's own products fetching because a user asked",
       "kind": "user-triggered",
       "eligible": true,
+      "programmable": false,
       "ua": [
         "Google-"
       ],
       "ipLists": [
-        "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json",
         "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json"
       ],
-      "docs": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers",
-      "programmable": false
+      "docs": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+    },
+    {
+      "id": "google/cloud-user-fetchers",
+      "operator": "Google",
+      "product": "Fetches made by sites and apps hosted on Google Cloud (not Google's own assistant)",
+      "kind": "user-triggered",
+      "eligible": true,
+      "programmable": true,
+      "ipLists": [
+        "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+      ],
+      "docs": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
     },
     {
       "id": "google/googlebot",

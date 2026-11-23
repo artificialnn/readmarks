@@ -168,6 +168,10 @@ for i, e in enumerate(parsed):
             if hashlib.sha256((t['salt'] + '\n' + t['text']).encode()).hexdigest() != cm: bad.append(f'entry {i}: commitment {k}')
     if e['type'] != 'mark': continue
     for ev in e['evidence']:
+        if ev['type'] == 'origin-signature' and not ev.get('bindsPath'):
+            # authority-only: replayable, so it must never be published or stand alone
+            if 'signature' in ev or 'params' in ev: bad.append(f'entry {i}: an authority-only signature was published')
+            continue
         if ev['type'] == 'origin-signature':
             sig_n += 1
             base = '\n'.join([f'{c}: {v}' for c, v in ev['components']] + [f'"@signature-params": {ev["params"]}'])
@@ -199,7 +203,8 @@ for i, e in enumerate(parsed):
             if lc != reg[2]['links'] or ev['links'].get(ev['link']) != e['stance'] or ev['assignedPlatform'] != reg[2]['platform']:
                 bad.append(f'entry {i}: session link map or platform differs from its registration')
     if e['assurance'] == 'proven' and not any(v['type'] == 'origin-signature' and v['bindsPath'] for v in e['evidence']): bad.append(f'entry {i}: proven without proof')
-    if e['assurance'] == 'observed' and not any(v['type'] in ('origin-network', 'origin-signature') for v in e['evidence']): bad.append(f'entry {i}: observed without origin evidence')
+    if e['assurance'] == 'observed' and not any(v['type'] == 'origin-network' for v in e['evidence']): bad.append(f'entry {i}: observed without a network-origin match')
+    if e.get('platform') and e['assurance'] != 'declared' and not any(v['type'] == 'origin-network' or (v['type'] == 'origin-signature' and v.get('bindsPath')) for v in e['evidence']): bad.append(f'entry {i}: attributed without evidence')
     if e['assurance'] == 'declared' and e.get('platform'): bad.append(f'entry {i}: declared but attributed')
 ok(not bad, f'evidence: {sig_n} request signatures re-verified ({bound_n} bound to their mark URL), {sess_n} review sessions matched to earlier registrations, {text_n} text commitments', '; '.join(bad[:5]))
 
